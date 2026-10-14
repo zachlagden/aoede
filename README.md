@@ -1,194 +1,161 @@
 <p align="center">
-  <img width="250" height="250" src="https://raw.githubusercontent.com/codetheweb/aoede/main/.github/logo.png">
+  <img width="250" height="250" src=".github/logo.png">
 </p>
 
-Aoede is a Discord music bot that **directly** streams from **Spotify to Discord**. The only interface is Spotify itself.
+# Aoede
 
-> **⚠️ IMPORTANT: Authentication Update (2024)**  
-> Spotify has deprecated username/password authentication. This fork includes support for **cached credentials** to fix authentication issues. See the [Authentication Setup](#authentication-setup) section below.
+Aoede is a Discord music bot that streams from Spotify to Discord. The only playback interface is Spotify itself.
 
-**Note**: a Spotify Premium account is currently required. This is a limitation of librespot, the Spotify library Aoede uses. Facebook logins [are not supported](https://github.com/librespot-org/librespot/discussions/635).
+This fork reads cached Spotify credentials before trying username/password authentication. Build this fork locally to include that support. The upstream `codetheweb/aoede` image and upstream release binaries do not contain these changes.
 
-![Demo](https://raw.githubusercontent.com/codetheweb/aoede/main/.github/demo.gif)
+Spotify Premium is required by librespot, the Spotify library Aoede uses. Facebook logins [are not supported](https://github.com/librespot-org/librespot/discussions/635). Authentication and playback depend on Spotify and Discord compatibility with the existing librespot and Songbird versions.
 
-## 💼 Usecases
+![Demo](.github/demo.gif)
+
+## Uses
 
 - Small servers with friends
-- Discord Stages, broadcast music to your audience
+- Discord Stages for broadcasting music
 
-## 🏗 Usage
+## Setup
 
-(Images are available for x86 and arm64.)
+Aoede requires a Discord bot token, not a user token. It follows the user specified by `DISCORD_USER_ID` and enables Spotify Connect when it detects that user in a voice channel.
 
-### Notes:
-⚠️ Aoede only supports bot tokens. Providing a user token won't work.
-
-Aoede will appear offline until you join a voice channel it has access it.
-
-### Docker Compose (recommended):
-
-There are a variety of image tags available:
-- `:0`: versions >= 0.0.0
-- `:0.5`: versions >= 0.5.0 and < 0.6.0
-- `:0.5.1`: an exact version specifier
-- `:latest`: whatever the latest version is
-
-```yaml
-version: '3.4'
-
-services:
-  aoede:
-    image: codetheweb/aoede
-    restart: always
-    volumes:
-      - ./aoede:/data
-    environment:
-      - DISCORD_TOKEN=
-      - SPOTIFY_USERNAME=
-      - SPOTIFY_PASSWORD=
-      - DISCORD_USER_ID=        # Discord user ID of the user you want Aoede to follow
-      - SPOTIFY_BOT_AUTOPLAY=   # Autoplay similar songs when your music ends (true/false)
-      - SPOTIFY_DEVICE_NAME=
-```
-
-### Docker:
-```env
-# .env
-DISCORD_TOKEN=
-SPOTIFY_USERNAME=
-SPOTIFY_PASSWORD=
-DISCORD_USER_ID=
-SPOTIFY_BOT_AUTOPLAY=
-SPOTIFY_DEVICE_NAME=
-```
+Clone this fork and run the following commands from the checkout directory:
 
 ```bash
-docker run --rm -d --env-file .env codetheweb/aoede
+git clone https://github.com/zachlagden/aoede.git
+cd aoede
+mkdir -p aoede-cache
 ```
 
-### Prebuilt Binaries:
+Follow [cached credentials setup](#cached-credentials-setup) to place `credentials.json` in `aoede-cache`. Keep this file private. Do not commit it or put it in an image.
 
-Prebuilt binaries are available on the [releases page](https://github.com/codetheweb/aoede/releases). Download the binary for your platform, then inside a terminal session:
+Create a local `.env` file with these values, replacing the token and user ID:
 
-1. There are two options to make configuration values available to Aoede:
-	1. Copy the `config.sample.toml` file to `config.toml` and update as necessary.
-	2. Use environment variables (see the Docker Compose section above):
-		- On Windows, you can use `setx DISCORD_TOKEN my-token`
-		- On Linux / macOS, you can use `export DISCORD_TOKEN=my-token`
-2. Run the binary:
-	- For Linux / macOS, `./platform-latest-aoede` after navigating to the correct directory
-	- For Windows, execute `windows-latest-aoede.exe` after navigating to the correct directory
+```dotenv
+DISCORD_TOKEN=replace_with_your_discord_bot_token
+DISCORD_USER_ID=123456789
+SPOTIFY_BOT_AUTOPLAY=false
+SPOTIFY_DEVICE_NAME=Aoede
+```
 
-### Building from source:
+`DISCORD_USER_ID` must be the numeric ID of the user Aoede should follow. Do not add `SPOTIFY_USERNAME` or `SPOTIFY_PASSWORD` when using cached credentials. `.env`, `config.toml`, and `aoede-cache` are ignored by Git and excluded from the Docker build context.
+
+### Docker Compose
+
+Save this as `compose.yaml` in the fork checkout, alongside `Dockerfile`. The build context must be that checkout, not a separate directory containing only the Compose file.
+
+```yaml
+services:
+  aoede:
+    build:
+      context: .
+    image: aoede:local
+    restart: unless-stopped
+    volumes:
+      - ./aoede-cache:/data
+    environment:
+      DISCORD_TOKEN: ${DISCORD_TOKEN:?Set DISCORD_TOKEN in .env}
+      DISCORD_USER_ID: ${DISCORD_USER_ID:?Set a numeric DISCORD_USER_ID in .env}
+      CACHE_DIR: /data
+      SPOTIFY_BOT_AUTOPLAY: ${SPOTIFY_BOT_AUTOPLAY:-false}
+      SPOTIFY_DEVICE_NAME: ${SPOTIFY_DEVICE_NAME:-Aoede}
+```
+
+Build and start it:
+
+```bash
+docker compose up --build -d
+docker compose logs --tail=100 aoede
+```
+
+The local image is named `aoede:local`. The bind mount preserves credentials and cached audio across container replacements. The container must be able to read and write `aoede-cache`.
+
+### Docker
+
+Use the same `.env` and credential-cache directory:
+
+```bash
+docker build --tag aoede:local .
+docker run -d --name aoede --restart unless-stopped \
+  --env-file .env \
+  --mount type=bind,source="$(pwd)/aoede-cache",target=/data \
+  aoede:local
+docker logs --tail=100 aoede
+```
+
+The Dockerfile sets `CACHE_DIR=/data`. Mount `aoede-cache` there so the bot can load `credentials.json` and keep its cache between runs. No fork image download is required.
+
+### Building from source
+
+Use the same [fork checkout](https://github.com/zachlagden/aoede) rather than an upstream release binary. These instructions do not require a prebuilt fork binary.
 
 Requirements:
 
-- automake
-- autoconf
-- cmake
-- libtool
-- Rust
-- Cargo
+- Rust and Cargo
+- A C/C++ compiler and make
+- automake, autoconf, and libtool
+- CMake
+- pkg-config
 
-Run `cargo build --release`. This will produce a binary in `target/release/aoede`. Set the required environment variables (see the Docker Compose section), then run the binary.
+Build the checked-in dependency versions:
 
-## 🔐 Authentication Setup
-
-### Option 1: Cached Credentials (Recommended)
-
-Due to Spotify deprecating username/password authentication in 2024, the recommended method is to use cached credentials:
-
-1. **Download librespot-auth**:
-   ```bash
-   wget https://github.com/dspearson/librespot-auth/releases/download/v0.1.1/librespot-auth-x86_64-linux-musl-static.tar.xz
-   tar -xf librespot-auth-x86_64-linux-musl-static.tar.xz
-   ```
-
-2. **Generate credentials**:
-   ```bash
-   ./librespot-auth-x86_64-linux-musl-static/librespot-auth --name "Aoede Bot"
-   ```
-
-3. **Select the device in Spotify**: Open Spotify on your phone/computer and select "Aoede Bot" from the device picker
-
-4. **Set up cache directory**:
-   ```bash
-   mkdir -p aoede-cache
-   cp credentials.json aoede-cache/
-   ```
-
-5. **Configure the bot**:
-   ```bash
-   cp config.sample.toml config.toml
-   # Edit config.toml with your Discord token and user ID
-   ```
-
-6. **Run the bot**:
-   ```bash
-   cargo run
-   ```
-
-### Option 2: Username/Password (Legacy - May Not Work)
-
-**Warning**: This method is deprecated by Spotify and may fail with "Bad credentials" error.
-
-Create a config.toml file or use environment variables:
 ```bash
-# With config.toml (recommended)
+CMAKE_POLICY_VERSION_MINIMUM=3.5 cargo build --locked --release
 cp config.sample.toml config.toml
-# Edit config.toml with your credentials
-cargo run
-
-# Or with environment variables
-DISCORD_TOKEN=your_token SPOTIFY_USERNAME=your_username SPOTIFY_PASSWORD=your_password DISCORD_USER_ID=your_user_id cargo run
 ```
 
-### Configuration Options
+Set your Discord bot token and numeric user ID in the local `config.toml`. Its default `cache_dir` is `aoede-cache`. Then run:
 
-#### config.toml (Recommended)
-
-```toml
-# Required
-discord_token = "your_discord_bot_token"
-discord_user_id = 123456789
-
-# Recommended for cached credentials
-cache_dir = "aoede-cache"
-
-# Optional (legacy auth - deprecated)
-spotify_username = ""
-spotify_password = ""
-
-# Optional settings
-spotify_bot_autoplay = false
-spotify_device_name = "Aoede"
+```bash
+./target/release/aoede
 ```
 
-#### Environment Variables (Alternative)
+The CMake setting allows the bundled Opus dependency to build with CMake 4. The Docker build sets it automatically. A successful build does not verify live Spotify authentication or Discord playback.
+
+## Cached credentials setup
+
+Spotify has deprecated username/password authentication. Use a credential cache rather than supplying those fields.
+
+Download and run `librespot-auth` on x86_64 Linux:
+
+```bash
+wget https://github.com/dspearson/librespot-auth/releases/download/v0.1.1/librespot-auth-x86_64-linux-musl-static.tar.xz
+tar -xf librespot-auth-x86_64-linux-musl-static.tar.xz
+./librespot-auth-x86_64-linux-musl-static/librespot-auth --name "Aoede Bot"
+```
+
+For other platforms, see the tool's [releases](https://github.com/dspearson/librespot-auth/releases).
+
+Open Spotify on your phone or computer and select "Aoede Bot" in the device picker. Once the tool writes `credentials.json`, stop it and copy that file into the persistent cache directory:
+
+```bash
+mkdir -p aoede-cache
+cp credentials.json aoede-cache/credentials.json
+```
+
+If the tool writes the file elsewhere, use that path as the copy source. For Docker, Aoede reads the mounted file as `/data/credentials.json`. For a source build, it reads `aoede-cache/credentials.json` unless you change `CACHE_DIR` or `cache_dir`.
+
+### Configuration
+
+For source builds, copy and edit `config.sample.toml`. For Docker, use the environment settings above. Environment variables override `config.toml` values.
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `DISCORD_TOKEN` | Yes | Your Discord bot token |
-| `DISCORD_USER_ID` | Yes | Discord user ID to follow |
-| `CACHE_DIR` | Recommended | Directory containing cached Spotify credentials |
-| `SPOTIFY_USERNAME` | Optional* | Spotify username (legacy auth) |
-| `SPOTIFY_PASSWORD` | Optional* | Spotify password (legacy auth) |
-| `SPOTIFY_BOT_AUTOPLAY` | No | Enable autoplay (true/false) |
-| `SPOTIFY_DEVICE_NAME` | No | Custom device name (default: "Aoede") |
+| `DISCORD_TOKEN` | Yes | Discord bot token |
+| `DISCORD_USER_ID` | Yes | Numeric Discord user ID to follow |
+| `CACHE_DIR` | No | Cache directory. Defaults to `aoede-cache` for source builds and `/data` in Docker |
+| `SPOTIFY_USERNAME` | No | Legacy Spotify username, used only if cached credentials are unavailable |
+| `SPOTIFY_PASSWORD` | No | Legacy Spotify password, used only if cached credentials are unavailable |
+| `SPOTIFY_BOT_AUTOPLAY` | No | Autoplay similar songs when music ends. Defaults to `false` |
+| `SPOTIFY_DEVICE_NAME` | No | Spotify device name. Defaults to `Aoede` |
 
-*Required only if not using cached credentials. Environment variables override config.toml values.
-
-### Migration from Username/Password
-
-If you were using username/password authentication:
-
-1. Follow the [cached credentials setup](#option-1-cached-credentials-recommended) above
-2. Remove `SPOTIFY_USERNAME` and `SPOTIFY_PASSWORD` environment variables
-3. Add `CACHE_DIR` environment variable pointing to your credentials directory
+Username/password remains an optional fallback in the source, but it should not be used for new setups.
 
 ### Troubleshooting
 
-- **"Bad credentials" error**: Use cached credentials instead of username/password
-- **"No cached credentials found"**: Ensure `credentials.json` is in your cache directory
-- **Device not showing in Spotify**: Make sure librespot-auth and Spotify are on the same network
-- **Credentials expire**: Re-run the credential generation process
+- `Missing field: 'SPOTIFY_USERNAME'` indicates an older build that requires username/password. Rebuild from this fork and use `aoede:local`, not the upstream image.
+- `No cached credentials found` means the bot did not load a credential file. Check `aoede-cache/credentials.json`, the `/data` mount, and file permissions. Without cached credentials, Aoede tries the legacy username/password fallback.
+- If the credential-generation device does not appear in Spotify, check that the tool and Spotify are on the same network.
+- If cached credentials are rejected, regenerate them. If authentication or playback still fails, report the image's source revision and redacted logs. Never share `.env`, `config.toml`, `credentials.json`, tokens, or passwords.
