@@ -5,6 +5,9 @@ on:
 
 name: Build binaries for release
 
+env:
+  CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+
 jobs:
   build:
     runs-on: ${{ matrix.os }}
@@ -12,14 +15,11 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v1
+      - uses: Swatinem/rust-cache@v2
       - name: Build in release mode
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release
+        run: cargo build --release --locked
 
       - name: Prefix binary name
         run: cp target/release/aoede target/release/${{ matrix.os }}-aoede
@@ -30,7 +30,7 @@ jobs:
         continue-on-error: true
 
       - name: Add to release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: target/release/*-aoede!(*.d|*.pdb)
         env:

@@ -13,6 +13,8 @@ librespot-auth-x86_64-*
 
 # Config
 config.toml
+.env
+.env.*
 
 # Development files
 CLAUDE.md

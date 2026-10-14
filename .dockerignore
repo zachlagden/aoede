@@ -1,2 +1,5 @@
-/target
-Dockerfile
+**
+!Cargo.toml
+!Cargo.lock
+!Dockerfile
+!src/**/*.rs

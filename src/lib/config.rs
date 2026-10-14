@@ -44,3 +44,41 @@ impl Config {
         Ok(config)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cached_credentials_do_not_require_username_or_password() {
+        let config: Config = Figment::from(Toml::string(
+            r#"
+            discord_token = "example-bot-token"
+            discord_user_id = 123456789
+            cache_dir = "/data"
+            "#,
+        ))
+        .extract()
+        .unwrap();
+
+        assert!(config.spotify_username.is_empty());
+        assert!(config.spotify_password.is_empty());
+        assert_eq!(config.cache_dir, "/data");
+        assert_eq!(config.discord_user_id, 123456789);
+        assert!(!config.spotify_bot_autoplay);
+        assert_eq!(config.spotify_device_name, "Aoede");
+    }
+
+    #[test]
+    fn discord_user_id_must_be_numeric() {
+        let config = Figment::from(Toml::string(
+            r#"
+            discord_token = "example-bot-token"
+            discord_user_id = "example-user"
+            "#,
+        ))
+        .extract::<Config>();
+
+        assert!(config.is_err());
+    }
+}

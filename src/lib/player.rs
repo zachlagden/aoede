@@ -96,6 +96,7 @@ impl audio_backend::Sink for EmittedSink {
 
         let mut resampled_buffer = resampler.output_buffer_allocate();
 
+        #[allow(clippy::chunks_exact_to_as_chunks)]
         for c in packet.samples().unwrap().chunks_exact(2) {
             input_buffer.0.push(c[0] as f32);
             input_buffer.1.push(c[1] as f32);
@@ -116,10 +117,8 @@ impl audio_backend::Sink for EmittedSink {
 
                 let sender = self.sender.clone();
 
-                for i in 0..resampled_buffer[0].len() {
-                    sender
-                        .send([resampled_buffer[0][i], resampled_buffer[1][i]])
-                        .unwrap()
+                for (i, &left) in resampled_buffer[0].iter().enumerate() {
+                    sender.send([left, resampled_buffer[1][i]]).unwrap()
                 }
             }
         }
